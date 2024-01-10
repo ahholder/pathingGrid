@@ -1,0 +1,31 @@
+body {
+    font-family: fantasy;
+    text-align: center;
+    color: black;
+    background-color: black;
+    fill-opacity: 0.5;
+    background-size: cover;
+    overflow: hidden;
+}
+
+#backdrop {
+    background-color: black;
+    width: 700px;
+    height: 700px;
+    display: flex;
+    margin: 0 auto;
+}
+
+#contents {
+    border: 1px solid black;
+    border-radius: 5px;
+    background-color: #99cc99;
+    display: flex;
+    margin: 0 auto;
+}
+
+#board {
+    display: flex;
+    margin: 0 auto;
+    z-index: 2;
+}
