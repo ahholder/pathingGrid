@@ -143,17 +143,16 @@ function makeHPs() {
 
 //A Test Run Each Frame
 function testFrameOne() {
-    //makeAnimation(testAnimation3(["none", HPs[(globalAnimationCycle % HPs.length)]], -1), 1, mouseSpot[0] - 1, mouseSpot[1] - 1, context, 1, "test", 1);
 
     //Single-Instance Test(s)
     if (globalAnimationCycle == 1) {
         commonWeather("light rain");
         makePathfinder();
 
-        let blockTestsMade = 5;
+        let blockTestsMade = 16;
         let gridUnused = [];
         for (let i = 0; i < grid.length; i++) {
-            if (pathfinder[0].space != grid[i].id && isOnGridEdge(i) == false) gridUnused[gridUnused.length] = i;
+            if (pathfinder[0].space != grid[i].id) gridUnused[gridUnused.length] = i;
         }
         for (let i = 0; i < blockTestsMade; i++) {
             let rand = rng(0, gridUnused.length - 1);
@@ -527,7 +526,7 @@ function makePathfinder() {
     let anim = makeAnimation(testAnimation4(patherColors(), -1), -1, xy[0], xy[1], context, anPix, "pather" + pathfinder.length, 60);
     let recent = [];
 
-    pathfinder[pathfinder.length] = { "id": id, "space": space, "loc": xy, "art": anim, "size": anSize * anPix, "speed": defaultSpeed, "recent": recent, "goal": -1, "dir": 0 };
+    pathfinder[pathfinder.length] = { "id": id, "space": space, "loc": xy, "art": anim, "size": anSize * anPix, "speed": defaultSpeed, "recent": recent, "goal": -1, "dir": 0, "oob": [] };
 }
 
 //Returns a List of Spaces with a Specific Role
@@ -716,8 +715,26 @@ function addJourneyNodes(journey, nodes) {
     return journey;
 }
 
+//Returns a List of All Nodes Excluded from the Journey -- Mostly for Testing Purposes
+function verifyNodes(journey) {
+    let nodez = [];
+    let excluded = [];
+    for (let i = 0; i < journey.nodes; i++) {
+        nodez[nodez.length] = journey.nodes[i].id;
+    }
+
+    for (let i = 0; i < grid.length; i++) {
+        if (doesInclude(nodez, i) == false) excluded[excluded.length] = i;
+    }
+
+    if (excluded.length > 0) return excluded;
+    return -1;
+}
+
 //Attempts to Move from a Space and Return a Path
 function scoutNode(current, journey) {
+    if (current == null) return -1;
+    if (current.id == null) return -1;
     let result;
     let options = assignSpaceOption(current.id);
     let available = assignSpaceAvailable(options, journey);
@@ -736,13 +753,39 @@ function scoutNode(current, journey) {
             result = short;
             breakCycle = true;
         } else {
-            journey.excluded[journey.excluded.length] = short;
-            result = scoutNode(short, journey);
+            if (short != -1) journey.excluded[journey.excluded.length] = short;
+
+            //let ceaseThreshold = available.length - 1;
+            let ceaseThreshold = 4;
+            let cease = false;
+            if (remainingPaths(journey)) {
+                journey.blocked = 0;
+            } else {
+                if (journey.blocked >= ceaseThreshold) {
+                    cease = true;
+                } else {
+                    journey.blocked += 1;
+                }
+            }
+
+            if (cease == false) {
+                result = scoutNode(short, journey);
+            } else {
+                result = -1;
+                breakCycle = true;
+            }
         }
     }
 
     //Failsafe
     return result;
+}
+
+//Returns Number of Available Paths for Scouting After Excluded Removal
+function remainingPaths(journey) {
+    let remaining = journey.nodes.length - journey.excluded.length;
+    if (remaining > 0) return true;
+    return false;
 }
 
 //Returns an Array Reflecting the Walked Path
@@ -763,22 +806,24 @@ function startPathing(pather, nextOnly) {
     let path = -1;
     let current = pather.space;
 
+    if (checkOutOfBounds(pather)) return path;
     if (isUnreachable(pather.goal, pather)) return path;
 
-    let options = assignSpaceOption(current);
-    let available = assignSpaceAvailable(options, pather);
-
-    if (isDeadEnd(available) != true) {
-        //path = [];
+    if (isUnreachable(pather.goal, pather) != true) {
         let node = makePathNode("none", current);
-        let journey = { "nodes": [node], "goal": pather.goal, "excluded": [] };
+        let journey = { "nodes": [node], "goal": pather.goal, "excluded": [], "blocked": 0 };
         let dest = scoutNode(node, journey);
-        path = formPath([], dest);
+        if (typeof dest == "object") path = formPath([], dest);
     }
 
 
     //Final
-    if (path < 0) return path;
+    if (typeof path == "number") {
+        if (checkOutOfBounds(pather) == false) pather = addOutOfBounds(pather.goal, pather);
+        if (path < 0) return path;
+        if (isNaN(path)) return -1;
+    }
+    if (typeof path != "object") return -1;
     if (nextOnly) return path[1];
     return path;
 }
@@ -881,6 +926,7 @@ function changePathGoal(pather, newGoal) {
     if (pather.goal != newGoal) {
         pather.goal = newGoal;
         pather.recent = [];
+        pather.oob = [];
     }
 
     //Final
@@ -923,6 +969,24 @@ function isUnreachable(space, pather) {
     if (isDeadEnd(available)) return true;
     return false;
 
+}
+
+//Adds to the Out of Bounds List
+function addOutOfBounds(space, pather) {
+    if (typeof space == "object") space = space.id;
+    pather.oob[pather.oob.length] = space;
+    //outOfBounds[outOfBounds.length] = space;
+    return pather;
+}
+
+//Checks if a Space Id is Out of Bounds
+function checkOutOfBounds(pather) {
+    let space = pather.goal;
+    let outOfBounds = pather.oob;
+    if (outOfBounds.length <= 0) return false;
+    if (typeof space == "object") space = space.id;
+    if (doesInclude(outOfBounds, space)) return true;
+    return false;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------------------
