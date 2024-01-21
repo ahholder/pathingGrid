@@ -5,6 +5,7 @@
 let overlay;
 let board;
 let context;
+let mapTerrain;
 let layers = [];
 let boardWidth = 700;
 let boardHeight = 700;
@@ -32,6 +33,7 @@ let mouseSpot = [];
 let HPs = [];
 let pathfinder = [];
 let weather = [];
+//let map = [];
 
 //------------------------------------------------------------------------------------------------------------------------------------------------------
 //Startup Functions
@@ -57,9 +59,16 @@ function makeFoundationalElements() {
     board.height = boardHeight;
     context = board.getContext("2d");
     addAnimationZone(context);
-    overlay.addEventListener("mousemove", mouseMoved);
+
+    let board2 = document.getElementById("board2");
+    //board2.width = board.width;
+    //board2.height = board.height;
+    board2.width = boardWidth;
+    board2.height = boardHeight;
+    mapTerrain = board2.getContext("2d");
 
     //makeCanvasLayers();
+    overlay.addEventListener("mousemove", mouseMoved);
     document.addEventListener("keydown", presser);
 
 }
@@ -146,10 +155,14 @@ function testFrameOne() {
 
     //Single-Instance Test(s)
     if (globalAnimationCycle == 1) {
+        //drawSprite(mapTerrain, animationBird(["none", "blue", "red", "green", "white"], 1), 150, 200, 5);
         commonWeather("light rain");
         makePathfinder();
 
-        let blockTestsMade = 16;
+        //console.log(getGridSurrounding(15, 2, true, false));
+        
+
+        /*let blockTestsMade = 16;
         let gridUnused = [];
         for (let i = 0; i < grid.length; i++) {
             if (pathfinder[0].space != grid[i].id) gridUnused[gridUnused.length] = i;
@@ -159,7 +172,7 @@ function testFrameOne() {
             makePathBlock(gridUnused[rand]);
             gridUnused[rand] = gridUnused[gridUnused.length - 1];
             gridUnused.pop();
-        }
+        }*/
     }
 }
 
@@ -186,6 +199,8 @@ function makeGrid() {
             grid[id] = newSpace;
         }
     }
+
+    makeGridTerrain(mapTerrain);
 }
 
 //Returns Values for Grid Sizes and Spacing
@@ -408,6 +423,208 @@ function isOnGridEdge(id) {
     return false;
 }
 
+//Returns Which Grid Edges a Space Touches
+function getGridEdges(id) {
+    //Left, Right, Top, Bottom
+    let touches = [false, false, false, false];
+    if (isOnGridEdge(id) != true) return touches;
+
+    if (id < sizeGrid("c")) touches[0] = true;
+    if (id > grid.length - sizeGrid("c")) touches[1] = true;
+    if (id % sizeGrid("r") == 0) touches[2] = true;
+    if ((id + 1) % sizeGrid("r") == 0) touches[3] = true;
+
+    return touches;
+}
+
+//Returns if the Grid Space Touches a Corner
+function getGridCorner(id) {
+    //None, Top-Left, Bottom-Left, Top-Right, Bottom-Right
+    let corner = 0;
+    let edges = getGridEdges(id);
+    if (edges[0] && edges[2]) corner = 1;
+    if (edges[0] && edges[3]) corner = 2;
+    if (edges[1] && edges[2]) corner = 3;
+    if (edges[1] && edges[3]) corner = 4;
+
+    return corner;
+}
+
+//Gets Neighboring Spaces on a Grid (Left, Right, Top, Bottom)
+function getGridNeighbors(id, w, h, max) {
+    let result = [-1, -1, -1, -1];
+    let edges = isOnBorder(id, w, h, false, false);
+
+    let tally = 0; //Left
+    if (edges[tally] == false) {
+        result[tally] = id - w;
+    }
+    tally += 1; //Right
+    if (edges[tally] == false) {
+        result[tally] = id + w;
+    }
+    tally += 1; //Top
+    if (edges[tally] == false) {
+        result[tally] = id - 1;
+    }
+    tally += 1; //Bottom
+    if (edges[tally] == false) {
+        result[tally] = id + 1;
+    }
+
+    for (let i = 0; i < result.length; i++) {
+        if (result[i] > max) result[i] = -1;
+        if (result[i] < 0) result[i] = -1;
+    }
+
+    return result;
+}
+
+//Returns an Array of Surrounding Spaces on the Grid
+function getGridSurrounding(id, distance, includeDiagonal, includeOrigin) {
+    let max = grid.length - 1;
+    let w = sizeGrid("c");
+    let h = sizeGrid("r");
+    let result = [];
+
+    for (let i = 1; i <= distance; i++) {
+        if (doesInclude(result, id - (w * i) == false)) result[result.length] = id - (w * i);
+        if (doesInclude(result, id + (w * i) == false)) result[result.length] = id + (w * i);
+        if (doesInclude(result, id - i == false)) result[result.length] = id - i;
+        if (doesInclude(result, id + i == false)) result[result.length] = id + i;
+        if (includeDiagonal) {
+            let xs = [];
+            let ys = [];
+            xs[0] = nudgeNum(getLineNum(id, w, h, true) - 2, 1, 0, w - 1);
+            xs[1] = nudgeNum(getLineNum(id, w, h, true) + 2, 1, 0, w - 1);
+            ys[0] = nudgeNum(getLineNum(id, w, h, false) - 2, 1, 0, h - 1);
+            ys[1] = nudgeNum(getLineNum(id, w, h, false) + 2, 1, 0, h - 1);
+            let min = 0;
+            let maxi = grid.length;
+
+            for (let i2 = min; i2 < maxi; i2++) {
+                let x = getLineNum(i2, w, h, true);
+                let y = getLineNum(i2, w, h, false);
+                if (x <= xs[1] && x >= xs[0]) {
+                    if (y <= ys[1] && y >= ys[0]) {
+                        if (doesInclude(result, i2) == false) {
+                            result[result.length] = i2;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    for (let i = 0; i < result.length; i++) {
+        if (result[i] > max || result[i] < 0 || (includeOrigin == false && result[i] == id)) {
+            result[i] = result[result.length - 1];
+            result.pop();
+            i -= 1;
+        }
+    }
+
+    result.sort((a, b) => a - b);
+
+    return result;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------------------
+//Terrain Functions
+//------------------------------------------------------------------------------------------------------------------------------------------------------
+
+//Creates Terrain Types for the Grid
+function makeGridTerrain(region) {
+    let dim = [sizeGrid("w"), sizeGrid("h")];
+    let spaces = grid.length;
+
+    for (let i = 0; i < spaces; i++) {
+        grid[i].role = randomTerrain(true);
+    }
+
+    drawAllGridTerrain(region);
+}
+
+//Draws All Grid Terrains
+function drawAllGridTerrain(region) {
+    region.clearRect(0, 0, boardWidth, boardHeight);
+    let dim = [sizeGrid("w"), sizeGrid("h")];
+    let spaces = grid.length;
+
+    for (let i = 0; i < spaces; i++) {
+        let x = Math.floor(i / sizeGrid("c")) * dim[0];
+        let y = (i % sizeGrid("r")) * dim[1];
+        drawTerrain(region, i, grid[i].role, x, y, dim[0], dim[1]);
+    }
+}
+
+//Draws Terrain in an Area
+function drawTerrain(region, id, ter, x, y, w, h) {
+    if (typeof ter == "number") ter = tType(ter);
+    let colors = tColors(ter);
+    let neighbors = getGridNeighbors(id, sizeGrid("c"), sizeGrid("r"), grid.length - 1);
+    let borUsed = [0, 2];
+    let artSpread = [];
+
+    for (let i = 0; i < h; i++) {
+        artSpread[i] = [];
+        for (let i2 = 0; i2 < w; i2++) {
+            let i3 = (i * h) + i2;
+            artSpread[i][i2] = colors[0];
+            if (isOnBorder(i3, w, h, true, true)) {
+                let bordered = isOnBorder(i3, w, h, false, true);
+                for (let i4 = 0; i4 < borUsed.length; i4++) {
+                    if (sameNeighborTerrain(id, neighbors[borUsed[i4]]) == false && bordered[borUsed[i4]]) {
+                        artSpread[i][i2] = colors[1];
+                    }
+                }
+            }
+        }
+    }
+    let art = makeDrawing(artSpread, false);
+    drawSprite(region, art, x, y, 1);
+}
+
+//Checks if a Neighbor is the Same Terrain Type
+function sameNeighborTerrain(a, b) {
+    if (typeof a == "object") a = a.id;
+    if (typeof b == "object") b = b.id;
+    if (a > grid.length || b > grid.length) return true;
+    if (a < 0 || b < 0) return true;
+    if (grid[a].role == grid[b].role) return true;
+    return false;
+}
+
+//Gets a List of Colors for a Terrain Type
+function tColors(id) {
+    //Format -- Area, Border, Special
+    let terrains = tType(-1);
+    if (typeof id == "number") id = tType(id);
+    let result = ["", "", ""];
+
+    if (id == terrains[0]) result = ["tan", "brown", "navajowhite"];
+    if (id == terrains[1]) result = ["skyblue", "darkblue", "blue"];
+    if (id == terrains[2]) result = ["", "", ""];
+
+    return result;
+}
+
+//Returns a Specific Terrain Type or List of Terrain Types
+function tType(id) {
+    let terrains = ["ground", "water"];
+    if (id < 0 || id > terrains.length) return terrains;
+    return terrains[id];
+}
+
+//Returns a Random Terrain Type
+function randomTerrain(useName) {
+    let terrains = tType(-1);
+    let rand = rng(0, terrains.length - 1);
+    if (useName) return terrains[rand];
+    return rand;
+}
+
+
 //------------------------------------------------------------------------------------------------------------------------------------------------------
 //Player Functions
 //------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -434,6 +651,23 @@ function presser(e) {
         }
 
     }
+
+
+    if (e.code == "Enter") {
+        for (let i = 0; i < pathfinder.length; i++) {
+            if (pathfinder[i].walkable.length > 1) {
+                pathfinder[i].walkable = [];
+                pathfinder[i] = addWalkable(pathfinder[i], grid[pathfinder[i].space].role);
+            } else {
+                pathfinder[i].walkable = [];
+                let terrainz = tType(-1);
+                for (let i2 = 0; i2 < terrainz.length; i2++) {
+                    pathfinder[i] = addWalkable(pathfinder[i], terrainz[i2]);
+                }
+            }
+            pathfinder[i] = turnPather(pathfinder[i]);
+        }
+    }
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -441,8 +675,11 @@ function presser(e) {
 //------------------------------------------------------------------------------------------------------------------------------------------------------
 
 //Returns an Array of Colors for the Pather
-function patherColors() {
-    return ["none", "#000055", "#444455", "#ffffcc", "#aa6600"];
+function patherColors(walks) {
+    let tWalk = { "walkable": walks };
+    if (checkWalkable(tWalk, tType(1)) && checkWalkable(tWalk, tType(0))) return ["none", "#000055", "#444455", "#ffffcc", "#aa6600"];
+    if (checkWalkable(tWalk, tType(1))) return ["none", "#004466", "#006699", "#ffaaaa", "#0000ff"];
+    return ["none", "#ffffff", "#000000", "#992222", "#303030"];
 }
 
 //Console Prints the Distances to All Other Spaces
@@ -523,10 +760,26 @@ function makePathfinder() {
     let id = pathfinder.length;
 
     removeAnimation("pathfinder");
-    let anim = makeAnimation(testAnimation4(patherColors(), -1), -1, xy[0], xy[1], context, anPix, "pather" + pathfinder.length, 60);
+    let anim = makeAnimation(animationBird(patherColors([tType(0)]), -1), -1, xy[0], xy[1], context, anPix, "pather" + pathfinder.length, 60);
     let recent = [];
 
-    pathfinder[pathfinder.length] = { "id": id, "space": space, "loc": xy, "art": anim, "size": anSize * anPix, "speed": defaultSpeed, "recent": recent, "goal": -1, "dir": 0, "oob": [] };
+    pathfinder[pathfinder.length] = {
+        "id": id, "space": space, "loc": xy, "art": anim, "size": anSize * anPix, "speed": defaultSpeed, "recent": recent, "goal": -1,
+        "dir": 0, "oob": [], "walkable": []
+    };
+
+    pathfinder[pathfinder.length - 1] = addWalkable(pathfinder[pathfinder.length - 1], grid[pathfinder[pathfinder.length - 1].space].role);
+    pathfinder[pathfinder.length - 1].art.art = getPatherAnimation(pathfinder[pathfinder.length - 1]);
+
+    let minimumMoves = getGridSurrounding(pathfinder[pathfinder.length - 1].space, 2, true, false);
+    for (let i = 0; i < minimumMoves.length; i++) {
+        grid[minimumMoves[i]].role = grid[pathfinder[pathfinder.length - 1].space].role;
+    }
+    drawAllGridTerrain(mapTerrain);
+
+    /*pathfinder[pathfinder.length - 1] = addWalkable(pathfinder[pathfinder.length - 1], 0);
+    pathfinder[pathfinder.length - 1] = addWalkable(pathfinder[pathfinder.length - 1], 1);
+    pathfinder[pathfinder.length - 1] = removeWalkable(pathfinder[pathfinder.length - 1], 1);*/
 }
 
 //Returns a List of Spaces with a Specific Role
@@ -573,7 +826,7 @@ function learnPath(pather) {
     pather.space = checkCurrentSpace(scope[0], scope[1]);
     if (doesInclude(pather.recent, pather.space) == false) pather.recent[pather.recent.length] = pather.space;
     if (pather.loc[0] == longDest[0] && pather.loc[1] == longDest[1]) return;
-    if (canPath(goal, [pather.space], [pather.space], goal, pather.recent) != true) return;
+    if (canPath(goal, [pather.space], [pather.space], goal, pather.recent, pather.walkable) != true) return;
 
     let shortDest = startPathing(pather, true);
     if (shortDest < 0) return;
@@ -626,7 +879,7 @@ function assignSpaceAvailable(options, journey) {
     let bonusDenied = [];
 
     for (let i = 0; i < options.length; i++) {
-        available[i] = canPath(options[i], traveled, denied, goal, bonusDenied);
+        available[i] = canPath(options[i], traveled, denied, goal, bonusDenied, journey.walkable);
     }
 
     return available;
@@ -756,7 +1009,7 @@ function scoutNode(current, journey) {
             if (short != -1) journey.excluded[journey.excluded.length] = short;
 
             //let ceaseThreshold = available.length - 1;
-            let ceaseThreshold = 4;
+            let ceaseThreshold = 10;
             let cease = false;
             if (remainingPaths(journey)) {
                 journey.blocked = 0;
@@ -811,7 +1064,7 @@ function startPathing(pather, nextOnly) {
 
     if (isUnreachable(pather.goal, pather) != true) {
         let node = makePathNode("none", current);
-        let journey = { "nodes": [node], "goal": pather.goal, "excluded": [], "blocked": 0 };
+        let journey = { "nodes": [node], "goal": pather.goal, "excluded": [], "blocked": 0, "walkable": pather.walkable };
         let dest = scoutNode(node, journey);
         if (typeof dest == "object") path = formPath([], dest);
     }
@@ -840,11 +1093,12 @@ function isDeadEnd(options) {
 }
 
 //Determines if a Course is Traversible
-function canPath(id, traveled, denied, goal, bonusDenied) {
+function canPath(id, traveled, denied, goal, bonusDenied, walkable) {
     if (isNaN(id)) return false;
     if (id < 0) return false;
     if (id >= grid.length) return false;
 
+    walkable = { "walkable": walkable };
     let result = true;
 
     for (let i = 0; i < traveled.length; i++) {
@@ -863,7 +1117,38 @@ function canPath(id, traveled, denied, goal, bonusDenied) {
 
     if (grid[id].role != "blocked" && id == goal) result = true;
 
+    if (checkWalkable(walkable, grid[id].role) == false) result = false;
+
     return result;
+}
+
+//Determines if a Terrain Type is Walkable
+function checkWalkable(pather, ter) {
+    if (ter == "object") ter = ter.role;
+    let result = doesInclude(pather.walkable, ter);
+    return result;
+}
+
+//Adds a Walkable Terrain and Returns a Pathfinder
+function addWalkable(pather, ter) {
+    if (typeof ter == "number") ter = tType(ter);
+    pather.walkable[pather.walkable.length] = ter;
+    return pather;
+}
+
+//Removes a Walkable Terrain and Returns a Pathfinder
+function removeWalkable(pather, ter) {
+    if (typeof ter == "number") ter = tType(ter);
+    if (pather.walkable.length <= 0) return pather;
+
+    for (let i = 0; i < pather.walkable.length; i++) {
+        if (pather.walkable[i] == ter) {
+            pather.walkable = deleteElement(pather.walkable, i);
+            i -= 1;
+        }
+    }
+
+    return pather;
 }
 
 //Determines if an Optional Space is the Goal
@@ -950,7 +1235,7 @@ function patherFacing(current, goal, base) {
 
 //Alters the Pathfinder's Animation
 function turnPather(pather) {
-    let anim = testAnimation4(patherColors(), -1);
+    let anim = getPatherAnimation(pather);
     pather.art.art = anim;
     if (pather.dir > 0) {
         for (let i = 0; i < pather.dir; i++) {
@@ -961,12 +1246,23 @@ function turnPather(pather) {
     return pather;
 }
 
+//Returns the Animation for the Pather Based on Walkable Terrain Types
+function getPatherAnimation(pather) {
+    let result;
+    if (checkWalkable(pather, tType(0))) result = animationBug(patherColors(pather.walkable), -1);
+    if (checkWalkable(pather, tType(1))) result = animationFish(patherColors(pather.walkable), -1);
+    if (checkWalkable(pather, tType(0)) && checkWalkable(pather, tType(1))) result = animationBird(patherColors(pather.walkable), -1);
+
+    return result;
+}
+
 //Checks if a Space is Unreachable
 function isUnreachable(space, pather) {
     let options = assignSpaceOption(space);
     let available = assignSpaceAvailable(options, pather);
 
     if (isDeadEnd(available)) return true;
+    if (checkWalkable(pather, grid[space].role) == false) return true;
     return false;
 
 }
@@ -1173,6 +1469,123 @@ function timesIncluded(batch, value) {
         if (batch[i] == value) result += 1;
     }
 
+    return result;
+}
+
+//Returns a Random Item from a List and the (Potentially) Modified List
+function randomFromList(list, doesModifyList) {
+    let rand;
+    let important = list;
+    if (typeof list != "object") return important;
+
+    if (list.length <= 1) {
+        rand = 0;
+    } else {
+        rand = rng(0, list.length - 1);
+    }
+    important = list[rand];
+
+
+    if (doesModifyList) {
+        for (let i = rand; i < list.length; i++) {
+            if (i != list.length - 1) list[i] = list[i + 1];
+        }
+        list.pop();
+    }
+
+
+    //return result;
+    return important;
+}
+
+//Returns an Array that Overrides Values from a Point and Removes Last Element
+function deleteElement(list, num) {
+    if (typeof list != "object") return list;
+    if (list.length <= 0) return [];
+    for (let i = num; i < list.length; i++) {
+        if (i != list.length - 1) list[i] = list[i + 1];
+    }
+    list.pop();
+
+    return list;
+}
+
+//Determines if a Space is on its Artwork's Border
+function isOnBorder(id, w, h, yesNoOnly, horzRead) {
+    //Left, Right, Top, Bottom
+    let result = [false, false, false, false];
+    if (horzRead) {
+        if (id % h == 0) result[0] = true;
+        if ((id + 1) % h == 0) result[1] = true;
+        if (id < w) result[2] = true;
+        if (id >= (w * (h - 1))) result[3] = true;
+    } else {
+        if (id < w) result[0] = true;
+        if (id >= (w * (h - 1))) result[1] = true;
+        if (id % h == 0) result[2] = true;
+        if ((id + 1) % h == 0) result[3] = true;
+    }
+
+    if (yesNoOnly) {
+        for (let i = 0; i < result.length; i++) {
+            if (result[i] == true) return true;
+        }
+        return false;
+    }
+
+    return result;
+}
+
+//Returns the Column or Row # for a Place on a Grid
+function getLineNum(id, w, h, getCol) {
+    let result;
+
+    if (getCol) {
+        result = Math.floor(id / h);
+    } else {
+        result = Math.floor(id % w);
+    }
+
+    return result;
+}
+
+//Returns an Array with Max & Min Values of a Line on a Grid
+function getLineEnds(id, w, h, getCol) {
+    let result = [];
+
+    if (getCol) {
+        result[0] = id * h;
+        result[1] = result[0] + (h - 1);
+    } else {
+        result[0] = id;
+        result[1] = ((w * h) - h) + result[0];
+    }
+
+    return result;
+}
+
+//Sets a Number to the Max or Min in a Range if Outside that Range
+function rangeNum(num, min, max) {
+    if (num > max) num = max;
+    if (num < min) num = min;
+    return num;
+}
+
+//Increases or Decreases a Number by an Amount Until it is Within a Range
+function nudgeNum(num, change, min, max) {
+    let result = num;
+    if (min > max || max - min < change) {
+        if (change == 1 && min == max) {
+
+        } else {
+            return result;
+        }
+    }
+    if (num >= min && num <= max) return result;
+    if (num > max) result -= change;
+    if (num < min) result += change;
+
+    if (result < min || result > max) return nudgeNum(result, change, min, max);
     return result;
 }
 
@@ -2203,6 +2616,46 @@ function trueAnimDimensions(drawn) {
     return [trueWidth, trueHeight];
 }
 
+//Adds Rows or Columns to an Array of Arrays (ex. "Original" of a Drawing)
+function addRowColumn(type, num, list, value, equalized) {
+    let rem = num;
+    while (rem > 0) {
+        let temp = [];
+        let leng = 0;
+        if (type == "row") {
+            leng = list[0].length;
+            for (let i = 0; i < leng; i++) {
+                temp[i] = value;
+            }
+            list.unshift(temp);
+            rem -= 1;
+
+            if (equalized && rem > 0) {
+                temp = [];
+                leng = list[0].length;
+                for (let i = 0; i < leng; i++) {
+                    temp[i] = value;
+                }
+                list.push(temp);
+                rem -= 1;
+            }
+        } else {
+            for (let i = 0; i < list.length; i++) {
+                list[i].unshift(value);
+            }
+            rem -= 1;
+            if (equalized && rem > 0) {
+                for (let i = 0; i < list.length; i++) {
+                    list[i].push(value);
+                }
+            }
+            rem -= 1;
+        }
+    }
+
+    return list;
+}
+
 //------------------------------------------------------------------------------------------------------------------------------------------------------
 //Queued Event Functions
 //------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -2422,7 +2875,7 @@ function compileArtStyle(images, colors, frame) {
     }
 }
 
-//Crystals
+//Miscellaneous and Unused
 function crystalArt(style, colors, frame) {
     let options = ["stand", "attack"];
     let searches = [crystalStand, crystalStand];
@@ -2485,7 +2938,6 @@ function blockPathImage(colors, frame) {
     return compileArtStyle(images, colors, frame);
 }
 
-//Test
 function testAnimation(colors, frame) {
     let shows = -1;
     let images = [];
@@ -2566,7 +3018,8 @@ function testAnimation3(colors, frame) {
     return compileArtStyle(images, colors, frame);
 }
 
-function testAnimation4(colors, frame) {
+//Pathers
+function animationBird(colors, frame) {
     let shows = -1;
     let images = [];
 
@@ -2672,6 +3125,245 @@ function testAnimation4(colors, frame) {
 
     return compileArtStyle(images, colors, frame);
 }
+
+function animationFish(colors, frame) {
+    let shows = -1;
+    let images = [];
+
+    shows += 1;
+    images[shows] = [];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 1, 2, 2, 1, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 1, 2, 2, 2, 2, 1, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 1, 2, 2, 2, 2, 1, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 1, 0, 1, 2, 2, 2, 2, 2, 2, 1, 0, 1, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 1, 1, 1, 2, 2, 2, 2, 2, 2, 1, 1, 1, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 1, 1, 2, 2, 2, 2, 2, 2, 1, 1, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 1, 2, 2, 2, 1, 2, 2, 1, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 1, 2, 2, 2, 1, 1, 2, 2, 2, 1, 0, 0, 0];
+    images[shows][images[shows].length] = [1, 0, 0, 1, 2, 2, 2, 1, 1, 2, 2, 2, 1, 0, 0, 1];
+    images[shows][images[shows].length] = [1, 1, 1, 1, 2, 2, 2, 1, 1, 2, 2, 2, 1, 1, 1, 1];
+    images[shows][images[shows].length] = [1, 1, 1, 1, 2, 2, 2, 2, 1, 2, 2, 2, 1, 1, 1, 1];
+    images[shows][images[shows].length] = [0, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 0];
+    images[shows][images[shows].length] = [0, 0, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 1, 2, 2, 2, 2, 2, 2, 1, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 1, 2, 2, 2, 2, 2, 2, 1, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 1, 3, 2, 2, 3, 1, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 1, 2, 2, 1, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0];
+
+    images[shows] = addRowColumn("col", 6, images[shows], 0, true);
+
+    shows += 1;
+    images[shows] = [];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 1, 2, 0, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 1, 2, 2, 1, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 1, 2, 2, 2, 2, 1, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 1, 2, 2, 2, 2, 1, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 2, 0, 1, 2, 2, 2, 2, 2, 2, 1, 0, 2, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 2, 2, 1, 2, 2, 2, 2, 2, 2, 1, 2, 2, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 2, 1, 2, 2, 2, 2, 2, 2, 1, 2, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 1, 2, 2, 2, 1, 2, 2, 1, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 1, 2, 2, 2, 1, 1, 2, 2, 2, 1, 0, 0, 0];
+    images[shows][images[shows].length] = [2, 0, 0, 1, 2, 2, 2, 1, 1, 2, 2, 2, 1, 0, 0, 2];
+    images[shows][images[shows].length] = [2, 2, 2, 1, 2, 2, 2, 1, 1, 2, 2, 2, 1, 2, 2, 2];
+    images[shows][images[shows].length] = [2, 2, 2, 1, 2, 2, 2, 2, 1, 2, 2, 2, 1, 2, 2, 2];
+    images[shows][images[shows].length] = [0, 2, 2, 1, 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 2, 0];
+    images[shows][images[shows].length] = [0, 0, 2, 1, 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 1, 2, 2, 2, 2, 2, 2, 1, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 1, 2, 2, 2, 2, 2, 2, 1, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 1, 3, 2, 2, 3, 1, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 1, 2, 2, 1, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0];
+
+    images[shows] = addRowColumn("col", 6, images[shows], 0, true);
+
+    shows += 1;
+    images[shows] = [];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 1, 2, 2, 1, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 1, 2, 2, 2, 2, 1, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 1, 2, 2, 2, 2, 1, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 1, 0, 1, 2, 2, 2, 2, 2, 2, 1, 0, 1, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 1, 1, 1, 2, 2, 2, 2, 2, 2, 1, 1, 1, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 1, 1, 2, 2, 2, 2, 2, 2, 1, 1, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 1, 2, 2, 2, 1, 2, 2, 1, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 1, 2, 2, 2, 1, 1, 2, 2, 2, 1, 0, 0, 0];
+    images[shows][images[shows].length] = [1, 0, 0, 1, 2, 2, 2, 1, 1, 2, 2, 2, 1, 0, 0, 1];
+    images[shows][images[shows].length] = [1, 1, 1, 1, 2, 2, 2, 1, 1, 2, 2, 2, 1, 1, 1, 1];
+    images[shows][images[shows].length] = [1, 1, 1, 1, 2, 2, 2, 2, 1, 2, 2, 2, 1, 1, 1, 1];
+    images[shows][images[shows].length] = [0, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 0];
+    images[shows][images[shows].length] = [0, 0, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 1, 2, 2, 2, 2, 2, 2, 1, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 1, 2, 2, 2, 2, 2, 2, 1, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 1, 3, 2, 2, 3, 1, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 1, 2, 2, 1, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0];
+
+    images[shows] = addRowColumn("col", 6, images[shows], 0, true);
+
+    shows += 1;
+    images[shows] = [];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 1, 2, 0, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 1, 2, 2, 1, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 1, 2, 2, 2, 2, 1, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 1, 2, 2, 2, 2, 1, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 2, 0, 1, 2, 2, 2, 2, 2, 2, 1, 0, 2, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 2, 2, 1, 2, 2, 2, 2, 2, 2, 1, 2, 2, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 2, 1, 2, 2, 2, 2, 2, 2, 1, 2, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 1, 2, 2, 2, 1, 2, 2, 1, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 1, 2, 2, 2, 1, 1, 2, 2, 2, 1, 0, 0, 0];
+    images[shows][images[shows].length] = [2, 0, 0, 1, 2, 2, 2, 1, 1, 2, 2, 2, 1, 0, 0, 2];
+    images[shows][images[shows].length] = [2, 2, 2, 1, 2, 2, 2, 1, 1, 2, 2, 2, 1, 2, 2, 2];
+    images[shows][images[shows].length] = [2, 2, 2, 1, 2, 2, 2, 2, 1, 2, 2, 2, 1, 2, 2, 2];
+    images[shows][images[shows].length] = [0, 2, 2, 1, 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 2, 0];
+    images[shows][images[shows].length] = [0, 0, 2, 1, 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 1, 2, 2, 2, 2, 2, 2, 1, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 1, 2, 2, 2, 2, 2, 2, 1, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 1, 3, 2, 2, 3, 1, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 1, 2, 2, 1, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0];
+
+    images[shows] = addRowColumn("col", 6, images[shows], 0, true);
+
+
+    return compileArtStyle(images, colors, frame);
+}
+
+function animationBug(colors, frame) {
+    let shows = -1;
+    let images = [];
+
+    shows += 1;
+    images[shows] = [];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 2, 3, 2, 0, 0, 2, 3, 2, 0, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 2, 3, 3, 2, 2, 3, 3, 2, 0, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 0, 2, 3, 3, 3, 3, 2, 0, 0, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 3, 3, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 3, 3, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 2, 2, 0, 0, 0, 2, 3, 3, 2, 0, 0, 0, 2, 2, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 2, 3, 3, 2, 0, 0, 3, 3, 3, 3, 0, 0, 2, 3, 3, 2, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 2, 3, 3, 3, 2, 1, 3, 2, 2, 3, 1, 2, 3, 3, 3, 2, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 2, 3, 2, 3, 3, 2, 3, 3, 2, 3, 3, 2, 3, 2, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 2, 3, 2, 3, 3, 2, 3, 3, 2, 3, 3, 2, 3, 2, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 2, 2, 0, 2, 3, 2, 3, 3, 3, 3, 3, 3, 2, 3, 2, 0, 2, 2, 0, 0];
+    images[shows][images[shows].length] = [0, 2, 3, 3, 2, 3, 3, 3, 2, 2, 2, 2, 2, 2, 3, 3, 3, 2, 3, 3, 2, 0];
+    images[shows][images[shows].length] = [2, 3, 3, 3, 2, 3, 3, 3, 3, 3, 2, 2, 3, 3, 3, 3, 3, 2, 3, 3, 3, 2];
+    images[shows][images[shows].length] = [0, 2, 3, 3, 2, 3, 3, 3, 3, 3, 2, 2, 3, 3, 3, 3, 3, 2, 3, 3, 2, 0];
+    images[shows][images[shows].length] = [0, 0, 2, 2, 0, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 0, 2, 2, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 2, 3, 2, 3, 3, 3, 3, 3, 3, 3, 3, 2, 3, 2, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 2, 3, 3, 2, 2, 3, 3, 3, 3, 2, 2, 3, 3, 2, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 2, 3, 2, 0, 0, 2, 2, 2, 2, 0, 0, 2, 3, 2, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+
+    images[shows] = rotateArt(makeDrawing(images[shows], false)).original;
+    images[shows] = rotateArt(makeDrawing(images[shows], false)).original;
+
+    shows += 1;
+    images[shows] = [];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 2, 3, 2, 0, 0, 2, 3, 2, 0, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 2, 3, 3, 2, 2, 3, 3, 2, 0, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 0, 2, 3, 3, 3, 3, 2, 0, 0, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 3, 3, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 3, 3, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 2, 2, 0, 0, 0, 2, 3, 3, 2, 0, 0, 2, 2, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 2, 3, 3, 2, 0, 1, 3, 3, 3, 3, 1, 2, 3, 3, 2, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 2, 3, 3, 3, 2, 3, 3, 2, 2, 3, 3, 2, 3, 3, 2, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 2, 3, 2, 3, 3, 2, 3, 3, 2, 3, 3, 2, 2, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 2, 3, 2, 3, 3, 2, 3, 3, 2, 3, 3, 2, 2, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 2, 2, 0, 2, 3, 2, 3, 3, 3, 3, 3, 3, 2, 3, 2, 0, 2, 2, 0, 0];
+    images[shows][images[shows].length] = [0, 2, 3, 3, 2, 3, 3, 3, 2, 2, 2, 2, 2, 2, 3, 3, 3, 2, 3, 3, 2, 0];
+    images[shows][images[shows].length] = [2, 3, 3, 3, 2, 3, 3, 3, 3, 3, 2, 2, 3, 3, 3, 3, 3, 2, 3, 3, 3, 2];
+    images[shows][images[shows].length] = [0, 2, 3, 3, 2, 3, 3, 3, 3, 3, 2, 2, 3, 3, 3, 3, 3, 2, 3, 3, 2, 0];
+    images[shows][images[shows].length] = [0, 0, 2, 2, 0, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 0, 2, 2, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 2, 3, 2, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 2, 3, 2, 2, 3, 3, 3, 3, 2, 2, 3, 3, 2, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 2, 3, 2, 0, 2, 2, 2, 2, 0, 0, 2, 3, 2, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+
+    images[shows] = rotateArt(makeDrawing(images[shows], false)).original;
+    images[shows] = rotateArt(makeDrawing(images[shows], false)).original;
+
+    shows += 1;
+    images[shows] = [];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 2, 3, 2, 0, 0, 2, 3, 2, 0, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 2, 3, 3, 2, 2, 3, 3, 2, 0, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 0, 2, 3, 3, 3, 3, 2, 0, 0, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 3, 3, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 3, 3, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 2, 2, 0, 0, 0, 2, 3, 3, 2, 0, 0, 0, 2, 2, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 2, 3, 3, 2, 0, 0, 3, 3, 3, 3, 0, 0, 2, 3, 3, 2, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 2, 3, 3, 3, 2, 1, 3, 2, 2, 3, 1, 2, 3, 3, 3, 2, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 2, 3, 2, 3, 3, 2, 3, 3, 2, 3, 3, 2, 3, 2, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 2, 3, 2, 3, 3, 2, 3, 3, 2, 3, 3, 2, 3, 2, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 2, 2, 0, 2, 3, 2, 3, 3, 3, 3, 3, 3, 2, 3, 2, 0, 2, 2, 0, 0];
+    images[shows][images[shows].length] = [0, 2, 3, 3, 2, 3, 3, 3, 2, 2, 2, 2, 2, 2, 3, 3, 3, 2, 3, 3, 2, 0];
+    images[shows][images[shows].length] = [2, 3, 3, 3, 2, 3, 3, 3, 3, 3, 2, 2, 3, 3, 3, 3, 3, 2, 3, 3, 3, 2];
+    images[shows][images[shows].length] = [0, 2, 3, 3, 2, 3, 3, 3, 3, 3, 2, 2, 3, 3, 3, 3, 3, 2, 3, 3, 2, 0];
+    images[shows][images[shows].length] = [0, 0, 2, 2, 0, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 0, 2, 2, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 2, 3, 2, 3, 3, 3, 3, 3, 3, 3, 3, 2, 3, 2, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 2, 3, 3, 2, 2, 3, 3, 3, 3, 2, 2, 3, 3, 2, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 2, 3, 2, 0, 0, 2, 2, 2, 2, 0, 0, 2, 3, 2, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+
+    images[shows] = rotateArt(makeDrawing(images[shows], false)).original;
+    images[shows] = rotateArt(makeDrawing(images[shows], false)).original;
+
+    shows += 1;
+    images[shows] = [];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 2, 3, 2, 0, 0, 2, 3, 2, 0, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 2, 3, 3, 2, 2, 3, 3, 2, 0, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 0, 2, 3, 3, 3, 3, 2, 0, 0, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 3, 3, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 3, 3, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 2, 2, 0, 0, 0, 2, 3, 3, 2, 0, 0, 2, 2, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 2, 3, 3, 2, 0, 1, 3, 3, 3, 3, 1, 2, 3, 3, 2, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 2, 3, 3, 3, 2, 3, 3, 2, 2, 3, 3, 2, 3, 3, 2, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 2, 3, 2, 3, 3, 2, 3, 3, 2, 3, 3, 2, 2, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 2, 3, 2, 3, 3, 2, 3, 3, 2, 3, 3, 2, 2, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 2, 2, 0, 2, 3, 2, 3, 3, 3, 3, 3, 3, 2, 3, 2, 0, 2, 2, 0, 0];
+    images[shows][images[shows].length] = [0, 2, 3, 3, 2, 3, 3, 3, 2, 2, 2, 2, 2, 2, 3, 3, 3, 2, 3, 3, 2, 0];
+    images[shows][images[shows].length] = [2, 3, 3, 3, 2, 3, 3, 3, 3, 3, 2, 2, 3, 3, 3, 3, 3, 2, 3, 3, 3, 2];
+    images[shows][images[shows].length] = [0, 2, 3, 3, 2, 3, 3, 3, 3, 3, 2, 2, 3, 3, 3, 3, 3, 2, 3, 3, 2, 0];
+    images[shows][images[shows].length] = [0, 0, 2, 2, 0, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 0, 2, 2, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 2, 3, 2, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 2, 3, 2, 2, 3, 3, 3, 3, 2, 2, 3, 3, 2, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 2, 3, 2, 0, 2, 2, 2, 2, 0, 0, 2, 3, 2, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0];
+    images[shows][images[shows].length] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+
+    images[shows] = rotateArt(makeDrawing(images[shows], false)).original;
+    images[shows] = rotateArt(makeDrawing(images[shows], false)).original;
+    images[shows] = alterArt(makeDrawing(images[shows], false), "flip", false);
+
+    //images[shows] = flipArt(images[shows]).original;
+
+    return compileArtStyle(images, colors, frame);
+}
+
 //------------------------------------------------------------------------------------------------------------------------------------------------------
 //Miscellaneous Functions
 //------------------------------------------------------------------------------------------------------------------------------------------------------

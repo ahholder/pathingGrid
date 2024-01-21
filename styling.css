@@ -29,3 +29,22 @@ body {
     margin: 0 auto;
     z-index: 2;
 }
+
+#board2 {
+    display: flex;
+    position: absolute;
+    margin: 0 auto;
+    z-index: 1;
+}
+
+#pointer1 {
+    font-family: Arial, Arial, Helvetica, sans-serif;
+    color: white;
+    font-size: 18px;
+}
+
+#pointer2 {
+    font-family: Arial, Arial, Helvetica, sans-serif;
+    color: white;
+    font-size: 18px;
+}
